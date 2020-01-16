@@ -1,0 +1,3 @@
+业务平台	www.baidu.com	200
+智能系统	abc.baidu.com	200
+后台管理系统	aaa.baidu.com	超时

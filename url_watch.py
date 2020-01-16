@@ -16,6 +16,7 @@ results_dir = 'results'                         # 文件夹名称
 config_file = 'config.txt'                      # 配置文件，包含发邮件的邮箱
 log_file = 'log.txt'                            # log记录文件
 url_file = 'url.txt'                            # url列表文件
+platform_file = 'platform.txt'                  # 平台列表文件,url所属平台/系统
 mail_file = 'mail.txt'                          # 邮箱列表文件
 my_sender = ""                                  # 发件人邮箱账号
 my_pass = ""                                    # 发件人授权码
@@ -24,13 +25,15 @@ send_name = ""                                  # 发件名
 send_subject = ""                               # 发件主题
 msg = ""                                        # 邮件内容提示
 url_list = []                                   # url测试列表
-
+platform_flag = True                            # 平台文件存在标志
+platform_list = []                              # 平台列表
 
 # 初始化
 def init():
     encode_file(config_file)
     encode_file(url_file)
     encode_file(mail_file)
+    encode_file(platform_file)
     global my_sender
     global my_pass
     global receivers
@@ -38,6 +41,7 @@ def init():
     global send_subject
     global msg
     global url_list
+    global platform_list
     my_sender = linecache.getline(config_file, 1).strip()       # 发件人邮箱账号
     my_pass = linecache.getline(config_file, 2).strip()         # 发件人授权码
     receivers = check_mail(mail_file)                           # 收件人邮箱账号
@@ -45,7 +49,12 @@ def init():
     send_subject = linecache.getline(config_file, 4).strip()    # 发件主题
     msg = linecache.getline(config_file, 5).strip() + '\n'      # 邮件内容提示
     url_list = linecache.getlines(url_file)                     # url测试列表
-    # makedir(results_dir)
+    platform_list = linecache.getlines(platform_file)           # 平台列表
+    if platform_list == []:
+        global platform_flag
+        platform_flag = False
+        log('{} 不存在或内容为空'.format(platform_file))
+        print('{} 不存在或内容为空'.format(platform_file))
 
 
 def makedir(dir_name):
@@ -90,43 +99,50 @@ def url_test():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36',
         'Connection': 'close'
     }
+    code_results = []   # 记录code
     if url_list == []:
         print('获取url列表失败！检查同文件夹下是否有{}，以及{}文件中是否有url'.format(url_file, url_file))
         log('获取url列表失败！检查同文件夹下是否有{}，以及{}文件中是否有url'.format(url_file, url_file))
-    code_results = []
-    with open(url_result, 'w', encoding='utf-8') as fu:
-        with open(url_code, 'w', encoding='utf-8') as fc:
-            for u in url_list:
-                if '://' in u:
-                    pass
-                else:
-                    u = 'http://' + u
-                u = u.replace('\n', '')
-                u = u.replace('\t', '')
-                u = u.replace(' ', '')
-                u = u.replace('Http://', 'http://')
-                u = u.replace('Https://', 'https://')
+    else:
+        for u in url_list:
+            if '://' in u:
+                pass
+            else:
+                u = 'http://' + u
+            u = u.replace('\n', '')
+            u = u.replace('\t', '')
+            u = u.replace(' ', '')
+            u = u.replace('Http://', 'http://')
+            u = u.replace('Https://', 'https://')
+            try:
+                session = requests.session()
+                session.keep_alive = False
+                code = session.head(url=u, headers=GHeaders, timeout=10, verify=False, allow_redirects=True).status_code
+            except Exception as e:
+                print(e)
+                code = '超时'
+            # 4xx和5xx 状态码用get方法重新请求验证，某些平台可能禁用head方法
+            # 如果不为2xx,用get请求
+            if str(code)[0] != '2':
                 try:
-                    session = requests.session()
-                    session.keep_alive = False
-                    code = session.head(url=u, headers=GHeaders, timeout=10, verify=False, allow_redirects=True).status_code
+                    code = session.get(url=u, headers=GHeaders, timeout=10, verify=False).status_code
                 except Exception as e:
                     print(e)
                     code = '超时'
-                # 4xx和5xx 状态码用get方法重新请求验证，某些平台可能禁用head方法
-                # 如果不为2xx,用get请求
-                if str(code)[0] != '2':
-                    try:
-                        code = session.get(url=u, headers=GHeaders, timeout=10, verify=False).status_code
-                    except Exception as e:
-                        print(e)
-                        code = '超时'
-                print(u, code)
-                fu.write(u + '\t' + str(code))
-                fu.write('\n')
-                fc.write(str(code))
-                fc.write('\n')
-                code_results.append(code)
+            print(u, code)
+            code_results.append(code)
+
+        with open(url_result, 'w', encoding='utf-8') as fu:
+            with open(url_code, 'w', encoding='utf-8') as fc:
+                for counter in range(len(url_list)):
+                    fc.write(str(code_results[counter]) + '\n')
+                    if platform_flag == True:
+                        try:
+                            platform = str(platform_list[counter]).strip()
+                        except:
+                            platform = ''
+                        fu.write('{}\t{}\t{}\n'.format(platform, str(url_list[counter]).strip(), str(code_results[counter])))
+
     log("url_watch end")
     print("url_watch end")
     return code_results
@@ -198,9 +214,9 @@ def send_mail(send_name, send_subject, send_msg, fujian_list):
         log(e)
 
 
-def compare(file1, file2):
+# 获取code为200的行数
+def compare(file1):
     f1_code_list = linecache.getlines(file1)
-    f2_code_list = linecache.getlines(file2)
     if f1_code_list == []:
         if os.path.exists(file1):
             print("{} 内容为空".format(file1))
@@ -209,60 +225,36 @@ def compare(file1, file2):
             print("{} 不存在".format(file1))
             log("{} 不存在".format(file1))
         return []
-    if f2_code_list == []:
-        if os.path.exists(file2):
-            print("{} 内容为空".format(file2))
-            log("{} 内容为空".format(file2))
+
+    # 记录code为200的行数
+    line_remeber = []   # 记录code为200的行数
+    # print(len(f2_code_list))
+    for line in range(len(f1_code_list)):
+        f1 = f1_code_list[line].strip()
+        if f1 == '200' or f1 == 200:
+            line_remeber.append(line)
         else:
-            print("{} 不存在".format(file2))
-            log("{} 不存在".format(file2))
-        return []
-    if f1_code_list == f2_code_list:
-        # 如果一样就是没变化不需要任何操作
-        print('{} 和 {} 内容相同，不参与比较'.format(file1, file2))
-        log('{} 和 {} 内容相同，不参与比较'.format(file1, file2))
-        return []
-    else:
-        # 如果不一样找到不一样的地方
-        if len(f1_code_list) == len(f2_code_list):
-            line_remeber = []   # 记录不一样的行数
-            # print(len(f2_code_list))
-            for line in range(len(f2_code_list)):
-                f1 = f1_code_list[line].strip()
-                f2 = f2_code_list[line].strip()
-                if f1 == f2:
-                    pass
-                else:
-                    line_remeber.append(line)
-            return line_remeber     # 返回不一样的行数
-        else:
-            print('{} 和 {} 行数不同，不参与比较'.format(file1, file2))
-            log('{} 和 {} 行数不同，不参与比较'.format(file1, file2))
-            return []
+            pass
+    return line_remeber     # 返回code为200的行数
+
 
 
 def compare_sendmail_loop():
     # 获取当前时间对象
     now = datetime.datetime.now()
-    # 获取上一个小时的整点时间
-    f1_name = (now + datetime.timedelta(hours=-1, minutes=-now.minute)).strftime("%Y-%m-%d+%H-%M")
     # 获取当前整点时间
-    f2_name = (now + datetime.timedelta(hours=0, minutes=-now.minute)).strftime("%Y-%m-%d+%H-%M")
-    f1_code_file = f1_name + 'code.txt'
-    f2_code_file = f2_name + 'code.txt'
-    f1_results_file = f1_name + 'urlresults.txt'
-    f2_results_file = f2_name + 'urlresults.txt'
-    compare_results = compare(f1_code_file, f2_code_file)     # 获取比较的结果
+    name = (now + datetime.timedelta(hours=0, minutes=-now.minute)).strftime("%Y-%m-%d+%H-%M")
+    code_file = name + 'code.txt'           # 状态码文件
+    results_file = name + 'urlresults.txt'  # url + code 文件
+    compare_results = compare(code_file)     # 获取code为200的结果
     send_msg = ""   # 邮件正文内容
     if compare_results:
         for line in compare_results:
             line = int(line) + 1
-            url = linecache.getline(url_file, line).strip()
-            f1_code = linecache.getline(f1_code_file, line).strip()
-            f2_code = linecache.getline(f2_code_file, line).strip()
-            send_msg = send_msg + url + "\t从 {} 变为 {} \n".format(f1_code, f2_code)
+            result = linecache.getline(results_file, line).strip()
+            send_msg = send_msg + "{}\n".format(result)
         send_msg = msg + send_msg
-        file_list = [f1_code_file, f2_code_file, f1_results_file, f2_results_file]
+        file_list = [results_file]
         print(send_msg)
         log(send_msg)
         try:
@@ -273,8 +265,8 @@ def compare_sendmail_loop():
             print(e)
             log(e)
     else:
-        print('{} 和 {}两个文件内容行数不一样 或者 内容完全一样，这里不发送邮件'.format(f1_code_file, f2_code_file))
-        log('{} 和 {}两个文件内容行数不一样 或者 内容完全一样，这里不发送邮件'.format(f1_code_file, f2_code_file))
+        print('{} 文件内容中无 200，这里不发送邮件'.format(code_file))
+        log('{} 文件内容中无 200，这里不发送邮件'.format(code_file))
 
 
 if __name__ == '__main__':
