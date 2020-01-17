@@ -145,7 +145,7 @@ def url_test():
 
     log("url_watch end")
     print("url_watch end")
-    return code_results
+    return name
 
 
 def fu_jian(name):
@@ -241,9 +241,10 @@ def compare(file1):
 
 def compare_sendmail_loop():
     # 获取当前时间对象
-    now = datetime.datetime.now()
-    # 获取当前整点时间
-    name = (now + datetime.timedelta(hours=0, minutes=-now.minute)).strftime("%Y-%m-%d+%H-%M")
+    # now = datetime.datetime.now()
+    # # 获取当前整点时间
+    # name = (now + datetime.timedelta(hours=0, minutes=-now.minute)).strftime("%Y-%m-%d+%H-%M")
+    name = url_test()
     code_file = name + 'code.txt'           # 状态码文件
     results_file = name + 'urlresults.txt'  # url + code 文件
     compare_results = compare(code_file)     # 获取code为200的结果
@@ -273,8 +274,8 @@ if __name__ == '__main__':
     init()                  # 初始化
     makedir(results_dir)    # 创建结果文件夹,同时切换工作目录
     scheduler = BlockingScheduler()
-    scheduler.add_job(url_test, 'cron', day_of_week='*', hour='*')
-    scheduler.add_job(compare_sendmail_loop, 'cron', day_of_week='*', hour='*', minute='59')
+    # scheduler.add_job(url_test, 'cron', day_of_week='*', hour='*')
+    scheduler.add_job(compare_sendmail_loop, 'cron', day_of_week='*', hour='*', minute='*')
     print(scheduler.get_jobs())
     scheduler.start()
     # 主要测试：
