@@ -275,7 +275,7 @@ if __name__ == '__main__':
     makedir(results_dir)    # 创建结果文件夹,同时切换工作目录
     scheduler = BlockingScheduler()
     # scheduler.add_job(url_test, 'cron', day_of_week='*', hour='*')
-    scheduler.add_job(compare_sendmail_loop, 'cron', day_of_week='*', hour='*', minute='*')
+    scheduler.add_job(compare_sendmail_loop, 'cron', day_of_week='*', hour='*')
     print(scheduler.get_jobs())
     scheduler.start()
     # 主要测试：
